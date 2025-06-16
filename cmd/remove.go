@@ -11,13 +11,9 @@ import (
 var removeCmd = &cobra.Command{
 	Use:   "remove <server@version>",
 	Short: "Remove installed MCP servers",
-	Long: `Remove installed MCP servers by specifying the server name and version.
-
-Examples:
-  mcpv remove server@1.0.0        # Remove specific server version
-  mcpv remove server              # Remove all versions of server`,
-	Args: cobra.MinimumNArgs(1),
-	RunE: runRemove,
+	Long:  `Remove installed MCP servers by specifying the server name and version.`,
+	Args:  cobra.MinimumNArgs(1),
+	RunE:  runRemove,
 }
 
 func runRemove(cmd *cobra.Command, args []string) error {

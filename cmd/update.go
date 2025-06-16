@@ -12,11 +12,7 @@ var updateCmd = &cobra.Command{
 	Use:   "update [server]",
 	Short: "Update MCP servers to latest versions",
 	Long: `Update MCP servers to their latest versions. If no server is specified,
-updates all servers configured in mcpv.json.
-
-Examples:
-  mcpv update                     # Update all servers from mcpv.json
-  mcpv update server              # Update specific server to latest version`,
+updates all servers configured in mcpv.json.`,
 	RunE: runUpdate,
 }
 

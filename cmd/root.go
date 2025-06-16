@@ -4,9 +4,16 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/socialviolation/asciiban/ascii"
 	"github.com/spf13/cobra"
+)
+
+var (
+	Version = "dev"
+	Commit  = "none"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -25,6 +32,15 @@ Examples:
   mcpv list                       # List installed servers
   mcpv update server              # Update server to latest version
   mcpv remove server@1.0.0        # Remove specific server version`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ascii.Draw(
+			ascii.WithMessage("mcpv."),
+			ascii.WithFont(ascii.FontUnivers),
+			ascii.WithPalette(ascii.PaletteLime),
+		)
+		fmt.Printf("Version: %s\nCommit: %s\n", Version, Commit)
+		_ = cmd.Help()
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -32,7 +32,8 @@ type ProjectConfig struct {
 
 // Manager handles MCP server operations
 type Manager struct {
-	dataDir string
+	dataDir            string
+	agentConfigManager *DynamicAgentConfigManager
 }
 
 // NewManager creates a new manager instance
@@ -47,8 +48,15 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
+	// Initialize dynamic agent config manager
+	agentConfigManager, err := NewDynamicAgentConfigManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize agent config manager: %w", err)
+	}
+
 	return &Manager{
-		dataDir: dataDir,
+		dataDir:            dataDir,
+		agentConfigManager: agentConfigManager,
 	}, nil
 }
 
@@ -375,6 +383,11 @@ func (m *Manager) RemoveServer(name, version string) error {
 		os.Remove(parentDir)
 	}
 
+	// Remove server from agent configurations
+	if err := m.RemoveServerFromAgentConfigs(name); err != nil {
+		fmt.Printf("Warning: Failed to remove server from agent configurations: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -471,10 +484,107 @@ func (m *Manager) InstallFromConfig(configPath string) error {
 	}
 
 	return nil
+	return nil
+}
+
+// InstallFromConfigForAgent installs all servers specified in the project config for a specific agent
+func (m *Manager) InstallFromConfigForAgent(configPath string, agentType AgentType) error {
+	config, err := m.LoadProjectConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	for _, server := range config.Servers {
+		if server.Repository == "" {
+			return fmt.Errorf("repository not specified for server %s", server.Name)
+		}
+
+		version := server.Version
+		if version == "" {
+			version = "latest"
+		}
+
+		fmt.Printf("Installing %s@%s for %s agent...\n", server.Name, version, agentType)
+		_, err := m.InstallServer(server.Name, version, server.Repository)
+		if err != nil {
+			if strings.Contains(err.Error(), "already installed") {
+				fmt.Printf("Server %s@%s is already installed\n", server.Name, version)
+				// Still need to configure for the specific agent
+			} else {
+				return err
+			}
+		} else {
+			fmt.Printf("Successfully installed %s@%s\n", server.Name, version)
+		}
+
+		// Configure for specific agent only
+		installedServer := &MCPServer{
+			Name:       server.Name,
+			Version:    version,
+			Repository: server.Repository,
+			Command:    server.Command,
+			Args:       server.Args,
+			Env:        server.Env,
+		}
+
+		// If we don't have execution details, try to determine them
+		if installedServer.Command == "" {
+			serverDir := filepath.Join(m.dataDir, server.Name, version)
+			command, args, env, err := m.determineExecution(serverDir)
+			if err == nil {
+				installedServer.Command = command
+				installedServer.Args = args
+				installedServer.Env = env
+			}
+		}
+
+		if err := m.agentConfigManager.AddServerToAgent(agentType, installedServer); err != nil {
+			return fmt.Errorf("failed to configure server %s for %s: %w", server.Name, agentType, err)
+		}
+		fmt.Printf("✓ Configured %s for %s agent\n", server.Name, agentType)
+	}
+
+	return nil
 }
 
 // InstallServerAndAddToConfig installs a server and adds it to the mcpv.json configuration
 func (m *Manager) InstallServerAndAddToConfig(name, version, repository, configPath string) error {
+	server, err := m.InstallServer(name, version, repository)
+	if err != nil {
+		return err
+	}
+
+	// Load existing config
+	config, err := m.LoadProjectConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Check if server already exists in config
+	for i, existingServer := range config.Servers {
+		if existingServer.Name == name && existingServer.Version == version {
+			// Update existing server with execution details
+			config.Servers[i] = *server
+			if err := m.SaveProjectConfig(config, configPath); err != nil {
+				return err
+			}
+			// Patch agent configurations
+			return m.PatchAgentConfigs(server)
+		}
+	}
+
+	// Add new server to config
+	config.Servers = append(config.Servers, *server)
+	if err := m.SaveProjectConfig(config, configPath); err != nil {
+		return err
+	}
+
+	// Patch agent configurations
+	return m.PatchAgentConfigs(server)
+}
+
+// InstallServerAndAddToConfigForAgent installs a server and adds it to the mcpv.json configuration for a specific agent
+func (m *Manager) InstallServerAndAddToConfigForAgent(name, version, repository, configPath string, agentType AgentType) error {
 	// Install the server
 	server, err := m.InstallServer(name, version, repository)
 	if err != nil {
@@ -492,13 +602,22 @@ func (m *Manager) InstallServerAndAddToConfig(name, version, repository, configP
 		if existingServer.Name == name && existingServer.Version == version {
 			// Update existing server with execution details
 			config.Servers[i] = *server
-			return m.SaveProjectConfig(config, configPath)
+			if err := m.SaveProjectConfig(config, configPath); err != nil {
+				return err
+			}
+			// Configure for specific agent only
+			return m.agentConfigManager.AddServerToAgent(agentType, server)
 		}
 	}
 
 	// Add new server to config
 	config.Servers = append(config.Servers, *server)
-	return m.SaveProjectConfig(config, configPath)
+	if err := m.SaveProjectConfig(config, configPath); err != nil {
+		return err
+	}
+
+	// Configure for specific agent only
+	return m.agentConfigManager.AddServerToAgent(agentType, server)
 }
 
 // isDirEmpty checks if a directory is empty
@@ -527,4 +646,112 @@ func ValidateVersion(version string) error {
 	}
 	_, err := semver.NewVersion(version)
 	return err
+}
+
+// PatchAgentConfigs patches agent configurations with the installed MCP server
+func (m *Manager) PatchAgentConfigs(server *MCPServer) error {
+	if m.agentConfigManager == nil {
+		return fmt.Errorf("agent config manager not initialized")
+	}
+
+	// Detect available agents
+	availableAgents := m.agentConfigManager.DetectAvailableAgents()
+	if len(availableAgents) == 0 {
+		fmt.Printf("No supported AI agents detected. Server %s installed but not configured for any agents.\n", server.Name)
+		return nil
+	}
+
+	fmt.Printf("Configuring server %s for detected agents...\n", server.Name)
+
+	// Add server to all available agents
+	var errors []string
+	for _, agentType := range availableAgents {
+		if err := m.agentConfigManager.AddServerToAgent(agentType, server); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", agentType, err))
+		} else {
+			fmt.Printf("✓ Added %s to %s configuration\n", server.Name, agentType)
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to configure server for some agents: %v", errors)
+	}
+
+	return nil
+}
+
+// RemoveServerFromAgentConfigs removes an MCP server from agent configurations
+func (m *Manager) RemoveServerFromAgentConfigs(serverName string) error {
+	if m.agentConfigManager == nil {
+		return fmt.Errorf("agent config manager not initialized")
+	}
+
+	// Detect available agents
+	availableAgents := m.agentConfigManager.DetectAvailableAgents()
+	if len(availableAgents) == 0 {
+		return nil // No agents to remove from
+	}
+
+	fmt.Printf("Removing server %s from agent configurations...\n", serverName)
+
+	// Remove server from all available agents
+	var errors []string
+	for _, agentType := range availableAgents {
+		if err := m.agentConfigManager.RemoveServerFromAgent(agentType, serverName); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", agentType, err))
+		} else {
+			fmt.Printf("✓ Removed %s from %s configuration\n", serverName, agentType)
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to remove server from some agents: %v", errors)
+	}
+
+	return nil
+}
+
+// ListAgentConfigurations lists the current agent configurations
+func (m *Manager) ListAgentConfigurations() error {
+	if m.agentConfigManager == nil {
+		return fmt.Errorf("agent config manager not initialized")
+	}
+
+	availableAgents := m.agentConfigManager.DetectAvailableAgents()
+	if len(availableAgents) == 0 {
+		fmt.Println("No supported AI agents detected.")
+		return nil
+	}
+
+	fmt.Println("Detected AI agents:")
+	for _, agentType := range availableAgents {
+		config, exists := m.agentConfigManager.configs[string(agentType)]
+		if !exists {
+			continue
+		}
+
+		configPath, err := config.GetConfigPath()
+		if err != nil {
+			fmt.Printf("- %s: Error getting config path: %v\n", agentType, err)
+			continue
+		}
+
+		fmt.Printf("- %s: %s\n", agentType, configPath)
+	}
+
+	return nil
+}
+
+// AddServerToAgent adds an MCP server to a specific agent's configuration
+func (m *Manager) AddServerToAgent(agentType AgentType, server *MCPServer) error {
+	if m.agentConfigManager == nil {
+		return fmt.Errorf("agent config manager not initialized")
+	}
+
+	return m.agentConfigManager.AddServerToAgent(agentType, server)
+}
+
+// GetAgentConfigManager returns the agent configuration manager
+func (m *Manager) GetAgentConfigManager() *DynamicAgentConfigManager {
+	return m.agentConfigManager
 }

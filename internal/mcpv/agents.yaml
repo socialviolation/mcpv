@@ -1,0 +1,173 @@
+version: "1.0.0"
+agents:
+  roocode:
+    name: "RooCode"
+    type: "roocode"
+    description: "RooCode AI agent configuration"
+    global_config:
+      path: "~/.roo/mcp.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    local_config:
+      path: ".roo/mcp.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    server_config_format:
+      command: "string"
+      args: "array"
+      env: "object"
+    detection:
+      paths:
+        - "~/.roo"
+      commands:
+        - "roo"
+    
+  claude:
+    name: "Claude Desktop"
+    type: "claude"
+    description: "Claude Desktop AI agent configuration"
+    global_config:
+      paths:
+        - "~/Library/Application Support/Claude/claude_desktop_config.json"  # macOS
+        - "~/.config/Claude/claude_desktop_config.json"  # Linux
+        - "%APPDATA%/Claude/claude_desktop_config.json"  # Windows
+      format: "json"
+      structure:
+        mcpServers: {}
+    local_config:
+      path: ".claude/claude_desktop_config.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    server_config_format:
+      command: "string"
+      args: "array"
+      env: "object"
+    detection:
+      paths:
+        - "~/Library/Application Support/Claude"
+        - "~/.config/Claude"
+        - "%APPDATA%/Claude"
+      commands:
+        - "claude"
+        
+  cursor:
+    name: "Cursor"
+    type: "cursor"
+    description: "Cursor AI agent configuration"
+    global_config:
+      paths:
+        - "~/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/config.json"  # macOS
+        - "~/.config/Cursor/User/globalStorage/cursor.mcp/config.json"  # Linux
+        - "%APPDATA%/Cursor/User/globalStorage/cursor.mcp/config.json"  # Windows
+      format: "json"
+      structure:
+        mcpServers: {}
+    local_config:
+      path: ".cursor/mcp_config.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    server_config_format:
+      command: "string"
+      args: "array"
+      env: "object"
+    detection:
+      paths:
+        - "~/Library/Application Support/Cursor"
+        - "~/.config/Cursor"
+        - "%APPDATA%/Cursor"
+      commands:
+        - "cursor"
+        
+  aider:
+    name: "Aider"
+    type: "aider"
+    description: "Aider AI agent configuration"
+    global_config:
+      path: "~/.aider/mcp.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    local_config:
+      path: ".aider/mcp.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    server_config_format:
+      command: "string"
+      args: "array"
+      env: "object"
+    detection:
+      paths:
+        - "~/.aider"
+      commands:
+        - "aider"
+        
+  claude_code:
+    name: "Claude Code"
+    type: "claude_code"
+    description: "Claude Code AI agent configuration"
+    global_config:
+      paths:
+        - "~/Library/Application Support/Claude Code/claude_code_config.json"  # macOS
+        - "~/.config/Claude Code/claude_code_config.json"  # Linux
+        - "%APPDATA%/Claude Code/claude_code_config.json"  # Windows
+      format: "json"
+      structure:
+        mcpServers: {}
+    local_config:
+      path: ".claude_code/claude_code_config.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    server_config_format:
+      command: "string"
+      args: "array"
+      env: "object"
+    detection:
+      paths:
+        - "~/Library/Application Support/Claude Code"
+        - "~/.config/Claude Code"
+        - "%APPDATA%/Claude Code"
+      commands:
+        - "claude-code"
+        
+  windsurf:
+    name: "Windsurf"
+    type: "windsurf"
+    description: "Windsurf AI agent configuration"
+    global_config:
+      paths:
+        - "~/Library/Application Support/Windsurf/User/globalStorage/windsurf.mcp/config.json"  # macOS
+        - "~/.config/Windsurf/User/globalStorage/windsurf.mcp/config.json"  # Linux
+        - "%APPDATA%/Windsurf/User/globalStorage/windsurf.mcp/config.json"  # Windows
+      format: "json"
+      structure:
+        mcpServers: {}
+    local_config:
+      path: ".windsurf/mcp_config.json"
+      format: "json"
+      structure:
+        mcpServers: {}
+    server_config_format:
+      command: "string"
+      args: "array"
+      env: "object"
+    detection:
+      paths:
+        - "~/Library/Application Support/Windsurf"
+        - "~/.config/Windsurf"
+        - "%APPDATA%/Windsurf"
+      commands:
+        - "windsurf"
+
+config_directory:
+  name: "mcpv"
+  paths:
+    darwin: "~/Library/Application Support/mcpv"
+    linux: "~/.config/mcpv"
+    windows: "%APPDATA%/mcpv"
+  agents_file: "agents.json"

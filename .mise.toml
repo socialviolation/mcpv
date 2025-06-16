@@ -1,6 +1,15 @@
 [tools]
 go = "1.24"
 
+[env]
+BIN = "mcpv"
+CALVER = "YYYY.0M-AUTO"
+
 [tasks.build]
 alias = "b"
-run = "go build -o bin/mcpv main.go"
+run = """
+set -e
+export VER=$(git calver next --short)
+go build -ldflags "-X github.com/socialviolation/mcpv/cmd.Version=${VER} -X github.com/socialviolation/mcpv/cmd.Commit=$(git rev-parse HEAD)" -o bin/${BIN} .
+./bin/${BIN}
+"""

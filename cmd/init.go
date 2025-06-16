@@ -13,10 +13,7 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new mcpv.json configuration file",
 	Long: `Initialize a new mcpv.json configuration file in the current directory.
-This file will contain the MCP server dependencies for your project.
-
-Examples:
-  mcpv init                       # Create mcpv.json with example configuration`,
+This file will contain the MCP server dependencies for your project.`,
 	RunE: runInit,
 }
 
