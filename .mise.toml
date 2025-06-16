@@ -1,0 +1,6 @@
+[tools]
+go = "1.24"
+
+[tasks.build]
+alias = "b"
+run = "go build -o bin/mcpv main.go"

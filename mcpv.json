@@ -1,0 +1,14 @@
+{
+  "servers": [
+    {
+      "name": "example-server",
+      "version": "1.0.0",
+      "repository": "https://github.com/example/mcp-server.git"
+    },
+    {
+      "name": "another-server",
+      "version": "latest",
+      "repository": "https://github.com/example/another-mcp-server.git"
+    }
+  ]
+}
