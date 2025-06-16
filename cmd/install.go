@@ -11,8 +11,9 @@ import (
 
 // installCmd represents the install command
 var installCmd = &cobra.Command{
-	Use:   "install [server@version]",
-	Short: "Install MCP servers",
+	Use:     "install [server@version]",
+	Aliases: []string{"i"},
+	Short:   "Install MCP servers",
 	Long: `Install MCP servers either from mcpv.json configuration file or by specifying a server directly.
 
 By default, servers are installed and configured for all detected AI agents. Use the --agent flag
@@ -74,9 +75,30 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("no mcpv.json found in current directory. Use 'mcpv init' to create one or specify a server directly")
 		}
 
+		// Get global flag
+		useGlobal, _ := cmd.Flags().GetBool("global")
+		useLocal := !useGlobal
+
 		if agentSpecified {
-			return mgr.InstallFromConfigForAgent(configPath, targetAgent)
+			return mgr.InstallFromConfigForAgentWithLocal(configPath, targetAgent, useLocal)
 		}
+
+		// Load config to check for default agent
+		config, err := mgr.LoadProjectConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// If there's a default agent, use it; otherwise install for all agents
+		if config.DefaultAgent != "" {
+			configType := "local"
+			if useGlobal {
+				configType = "global"
+			}
+			fmt.Printf("Using default agent: %s (%s config)\n", config.DefaultAgent, configType)
+			return mgr.InstallFromConfigForAgentWithLocal(configPath, manager.AgentType(config.DefaultAgent), useLocal)
+		}
+
 		return mgr.InstallFromConfig(configPath)
 	}
 
@@ -85,6 +107,24 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	configPath := cmd.Flag("config").Value.String()
 	if configPath == "" {
 		configPath = "mcpv.json"
+	}
+
+	// Get global flag
+	useGlobal, _ := cmd.Flags().GetBool("global")
+	useLocal := !useGlobal
+
+	// Load config to check for default agent if no agent specified
+	var defaultAgentType manager.AgentType
+	if !agentSpecified {
+		config, err := mgr.LoadProjectConfig(configPath)
+		if err == nil && config.DefaultAgent != "" {
+			defaultAgentType = manager.AgentType(config.DefaultAgent)
+			configType := "local"
+			if useGlobal {
+				configType = "global"
+			}
+			fmt.Printf("Using default agent: %s (%s config)\n", config.DefaultAgent, configType)
+		}
 	}
 
 	for _, arg := range args {
@@ -103,15 +143,29 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("repository URL required for server installation")
 		}
 
+		// Determine which agent to use
+		var effectiveAgent manager.AgentType
+		var effectiveAgentSpecified bool
+		configType := "local"
+		if useGlobal {
+			configType = "global"
+		}
+
 		if agentSpecified {
-			fmt.Printf("Installing %s@%s from %s for %s agent...\n", name, version, repoURL, agentFlag)
+			effectiveAgent = targetAgent
+			effectiveAgentSpecified = true
+			fmt.Printf("Installing %s@%s from %s for %s agent (%s config)...\n", name, version, repoURL, agentFlag, configType)
+		} else if defaultAgentType != "" {
+			effectiveAgent = defaultAgentType
+			effectiveAgentSpecified = true
+			fmt.Printf("Installing %s@%s from %s for default agent %s (%s config)...\n", name, version, repoURL, defaultAgentType, configType)
 		} else {
 			fmt.Printf("Installing %s@%s from %s...\n", name, version, repoURL)
 		}
 
 		// Install the server and add to config
-		if agentSpecified {
-			err := mgr.InstallServerAndAddToConfigForAgent(name, version, repoURL, configPath, targetAgent)
+		if effectiveAgentSpecified {
+			err := mgr.InstallServerAndAddToConfigForAgentWithLocal(name, version, repoURL, configPath, effectiveAgent, useLocal)
 			if err != nil {
 				if strings.Contains(err.Error(), "already installed") {
 					fmt.Printf("Server %s@%s is already installed\n", name, version)
@@ -119,7 +173,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 				}
 				return fmt.Errorf("failed to install server %s@%s: %w", name, version, err)
 			}
-			fmt.Printf("Successfully installed %s@%s for %s agent and added to %s\n", name, version, agentFlag, configPath)
+			fmt.Printf("Successfully installed %s@%s for %s agent (%s config) and added to %s\n", name, version, effectiveAgent, configType, configPath)
 		} else {
 			err := mgr.InstallServerAndAddToConfig(name, version, repoURL, configPath)
 			if err != nil {
@@ -140,5 +194,6 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 	installCmd.Flags().StringP("config", "c", "", "Path to mcpv.json config file")
 	installCmd.Flags().StringP("repo", "r", "", "Repository URL for the server")
-	installCmd.Flags().StringP("agent", "a", "", "Install server for specific agent only. If not specified, installs for all detected agents. Use 'mcpv agents' to see available types")
+	installCmd.Flags().StringP("agent", "a", "", "Install server for specific agent only. If not specified, uses default agent from config. Use 'mcpv agents' to see available types")
+	installCmd.Flags().BoolP("global", "g", false, "Install to global agent configuration instead of local (project-specific)")
 }

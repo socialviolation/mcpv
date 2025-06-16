@@ -11,10 +11,12 @@ import (
 type AgentType string
 
 const (
-	AgentTypeRooCode AgentType = "roocode"
-	AgentTypeClaude  AgentType = "claude"
-	AgentTypeCursor  AgentType = "cursor"
-	AgentTypeAider   AgentType = "aider"
+	AgentTypeRooCode    AgentType = "roocode"
+	AgentTypeClaude     AgentType = "claude"
+	AgentTypeCursor     AgentType = "cursor"
+	AgentTypeAider      AgentType = "aider"
+	AgentTypeClaudeCode AgentType = "claude_code"
+	AgentTypeWindsurf   AgentType = "windsurf"
 )
 
 // AgentConfig represents the configuration structure for different agents

@@ -4,12 +4,7 @@ agents:
     name: "RooCode"
     type: "roocode"
     description: "RooCode AI agent configuration"
-    global_config:
-      path: "~/.roo/mcp.json"
-      format: "json"
-      structure:
-        mcpServers: {}
-    local_config:
+    config:
       path: ".roo/mcp.json"
       format: "json"
       structure:
@@ -28,16 +23,12 @@ agents:
     name: "Claude Desktop"
     type: "claude"
     description: "Claude Desktop AI agent configuration"
-    global_config:
+    global: true
+    config:
       paths:
         - "~/Library/Application Support/Claude/claude_desktop_config.json"  # macOS
         - "~/.config/Claude/claude_desktop_config.json"  # Linux
         - "%APPDATA%/Claude/claude_desktop_config.json"  # Windows
-      format: "json"
-      structure:
-        mcpServers: {}
-    local_config:
-      path: ".claude/claude_desktop_config.json"
       format: "json"
       structure:
         mcpServers: {}
@@ -57,15 +48,7 @@ agents:
     name: "Cursor"
     type: "cursor"
     description: "Cursor AI agent configuration"
-    global_config:
-      paths:
-        - "~/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/config.json"  # macOS
-        - "~/.config/Cursor/User/globalStorage/cursor.mcp/config.json"  # Linux
-        - "%APPDATA%/Cursor/User/globalStorage/cursor.mcp/config.json"  # Windows
-      format: "json"
-      structure:
-        mcpServers: {}
-    local_config:
+    config:
       path: ".cursor/mcp_config.json"
       format: "json"
       structure:
@@ -86,12 +69,7 @@ agents:
     name: "Aider"
     type: "aider"
     description: "Aider AI agent configuration"
-    global_config:
-      path: "~/.aider/mcp.json"
-      format: "json"
-      structure:
-        mcpServers: {}
-    local_config:
+    config:
       path: ".aider/mcp.json"
       format: "json"
       structure:
@@ -110,15 +88,7 @@ agents:
     name: "Claude Code"
     type: "claude_code"
     description: "Claude Code AI agent configuration"
-    global_config:
-      paths:
-        - "~/Library/Application Support/Claude Code/claude_code_config.json"  # macOS
-        - "~/.config/Claude Code/claude_code_config.json"  # Linux
-        - "%APPDATA%/Claude Code/claude_code_config.json"  # Windows
-      format: "json"
-      structure:
-        mcpServers: {}
-    local_config:
+    config:
       path: ".claude_code/claude_code_config.json"
       format: "json"
       structure:
@@ -139,15 +109,7 @@ agents:
     name: "Windsurf"
     type: "windsurf"
     description: "Windsurf AI agent configuration"
-    global_config:
-      paths:
-        - "~/Library/Application Support/Windsurf/User/globalStorage/windsurf.mcp/config.json"  # macOS
-        - "~/.config/Windsurf/User/globalStorage/windsurf.mcp/config.json"  # Linux
-        - "%APPDATA%/Windsurf/User/globalStorage/windsurf.mcp/config.json"  # Windows
-      format: "json"
-      structure:
-        mcpServers: {}
-    local_config:
+    config:
       path: ".windsurf/mcp_config.json"
       format: "json"
       structure:

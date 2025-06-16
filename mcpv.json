@@ -1,3 +1,5 @@
 {
-  "servers": []
+  "servers": null,
+  "default_agent": "roocode",
+  "agents": {}
 }

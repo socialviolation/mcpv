@@ -25,9 +25,27 @@ func NewDynamicAgentConfig(agentType string, registry *AgentRegistry) (*DynamicA
 	}, nil
 }
 
+// NewDynamicAgentConfigWithLocal creates a new dynamic agent configuration with local preference
+// This is kept for backward compatibility but now ignores the useLocal parameter
+func NewDynamicAgentConfigWithLocal(agentType string, registry *AgentRegistry, useLocal bool) (*DynamicAgentConfig, error) {
+	return NewDynamicAgentConfig(agentType, registry)
+}
+
 // GetConfigPath returns the path to the agent's configuration file
 func (d *DynamicAgentConfig) GetConfigPath() (string, error) {
-	return d.registry.GetConfigPath(d.agentType, false)
+	spec, exists := d.registry.GetAgent(d.agentType)
+	if !exists {
+		return "", fmt.Errorf("unknown agent type: %s", d.agentType)
+	}
+
+	// For global agents, use global config path, otherwise use local
+	useLocal := !spec.Global
+	return d.registry.GetConfigPath(d.agentType, useLocal)
+}
+
+// GetConfigPathWithLocal returns the path to the agent's configuration file with local preference
+func (d *DynamicAgentConfig) GetConfigPathWithLocal(useLocal bool) (string, error) {
+	return d.registry.GetConfigPath(d.agentType, useLocal)
 }
 
 // LoadConfig loads the agent's configuration
@@ -40,10 +58,10 @@ func (d *DynamicAgentConfig) LoadConfig() (map[string]interface{}, error) {
 	// If config doesn't exist, return empty structure based on agent spec
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		spec, _ := d.registry.GetAgent(d.agentType)
-		if spec.GlobalConfig != nil && spec.GlobalConfig.Structure != nil {
+		if spec.Config != nil && spec.Config.Structure != nil {
 			// Return a copy of the default structure
 			result := make(map[string]interface{})
-			for k, v := range spec.GlobalConfig.Structure {
+			for k, v := range spec.Config.Structure {
 				result[k] = v
 			}
 			return result, nil
@@ -205,6 +223,17 @@ func (dacm *DynamicAgentConfigManager) AddServerToAgent(agentType AgentType, ser
 	config, exists := dacm.configs[string(agentType)]
 	if !exists {
 		return fmt.Errorf("unsupported agent type: %s", agentType)
+	}
+
+	return config.AddMCPServer(server)
+}
+
+// AddServerToAgentWithLocal adds an MCP server to a specific agent's configuration with local preference
+func (dacm *DynamicAgentConfigManager) AddServerToAgentWithLocal(agentType AgentType, server *MCPServer, useLocal bool) error {
+	// Create a new config with the specified local preference
+	config, err := NewDynamicAgentConfigWithLocal(string(agentType), dacm.registry, useLocal)
+	if err != nil {
+		return fmt.Errorf("failed to create agent config: %w", err)
 	}
 
 	return config.AddMCPServer(server)

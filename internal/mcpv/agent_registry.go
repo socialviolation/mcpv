@@ -25,8 +25,8 @@ type AgentSpec struct {
 	Name               string            `yaml:"name" json:"name"`
 	Type               string            `yaml:"type" json:"type"`
 	Description        string            `yaml:"description" json:"description"`
-	GlobalConfig       *ConfigSpec       `yaml:"global_config" json:"global_config"`
-	LocalConfig        *ConfigSpec       `yaml:"local_config" json:"local_config"`
+	Global             bool              `yaml:"global,omitempty" json:"global,omitempty"`
+	Config             *ConfigSpec       `yaml:"config" json:"config"`
 	ServerConfigFormat map[string]string `yaml:"server_config_format" json:"server_config_format"`
 	Detection          *DetectionSpec    `yaml:"detection" json:"detection"`
 }
@@ -50,6 +50,13 @@ type ConfigDirectorySpec struct {
 	Name       string            `yaml:"name" json:"name"`
 	Paths      map[string]string `yaml:"paths" json:"paths"`
 	AgentsFile string            `yaml:"agents_file" json:"agents_file"`
+}
+
+// MCPVConfig represents the structure of mcpv.json
+type MCPVConfig struct {
+	Servers      interface{}           `json:"servers"`
+	DefaultAgent string                `json:"default_agent"`
+	Agents       map[string]*AgentSpec `json:"agents"`
 }
 
 // LoadAgentRegistry loads the agent registry from embedded YAML or agents.json
@@ -76,6 +83,12 @@ func LoadAgentRegistry() (*AgentRegistry, error) {
 	registry, err := loadEmbeddedAgentRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load embedded agent registry: %w", err)
+	}
+
+	// Load and merge custom agents from mcpv.json if it exists
+	if err := registry.loadCustomAgents(); err != nil {
+		// Don't fail if custom agents can't be loaded, just log the error
+		fmt.Printf("Warning: failed to load custom agents from mcpv.json: %v\n", err)
 	}
 
 	// Install to config directory
@@ -266,20 +279,25 @@ func (ar *AgentRegistry) GetConfigPath(agentType string, useLocal bool) (string,
 		return "", fmt.Errorf("unknown agent type: %s", agentType)
 	}
 
-	var configSpec *ConfigSpec
-	if useLocal {
-		configSpec = spec.LocalConfig
-	} else {
-		configSpec = spec.GlobalConfig
+	// For agents with global flag set to true, ignore useLocal parameter
+	if spec.Global {
+		useLocal = false
 	}
 
+	configSpec := spec.Config
 	if configSpec == nil {
 		return "", fmt.Errorf("no config specification for agent %s", agentType)
 	}
 
 	// Handle single path
 	if configSpec.Path != "" {
-		return expandPath(configSpec.Path), nil
+		path := configSpec.Path
+		// If this is a global agent or useLocal is false, and path doesn't start with ".", expand it
+		if !useLocal && !strings.HasPrefix(path, ".") {
+			return expandPath(path), nil
+		}
+		// For local configs, return as-is (relative paths)
+		return path, nil
 	}
 
 	// Handle multiple paths (try each until one works)
@@ -338,4 +356,42 @@ func (ar *AgentRegistry) RemoveCustomAgent(agentType string) error {
 
 	delete(ar.Agents, agentType)
 	return ar.Save()
+}
+
+// loadCustomAgents loads custom agent configurations from mcpv.json in the current directory
+func (ar *AgentRegistry) loadCustomAgents() error {
+	// Look for mcpv.json in the current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	mcpvPath := filepath.Join(cwd, "mcpv.json")
+	if _, err := os.Stat(mcpvPath); os.IsNotExist(err) {
+		return nil // No mcpv.json file, nothing to load
+	}
+
+	data, err := os.ReadFile(mcpvPath)
+	if err != nil {
+		return fmt.Errorf("failed to read mcpv.json: %w", err)
+	}
+
+	var mcpvConfig MCPVConfig
+	if err := json.Unmarshal(data, &mcpvConfig); err != nil {
+		return fmt.Errorf("failed to parse mcpv.json: %w", err)
+	}
+
+	// Merge custom agents into the registry
+	if mcpvConfig.Agents != nil {
+		if ar.Agents == nil {
+			ar.Agents = make(map[string]*AgentSpec)
+		}
+
+		for agentType, spec := range mcpvConfig.Agents {
+			// Override or add the custom agent
+			ar.Agents[agentType] = spec
+		}
+	}
+
+	return nil
 }

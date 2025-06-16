@@ -27,7 +27,9 @@ type MCPServer struct {
 
 // ProjectConfig represents the mcpv.json configuration file
 type ProjectConfig struct {
-	Servers []MCPServer `json:"servers"`
+	Servers      []MCPServer           `json:"servers"`
+	DefaultAgent string                `json:"default_agent,omitempty"`
+	Agents       map[string]*AgentSpec `json:"agents,omitempty"`
 }
 
 // Manager handles MCP server operations
@@ -472,18 +474,43 @@ func (m *Manager) InstallFromConfig(configPath string) error {
 		}
 
 		fmt.Printf("Installing %s@%s...\n", server.Name, version)
-		_, err := m.InstallServer(server.Name, version, server.Repository)
+		installedServer, err := m.InstallServer(server.Name, version, server.Repository)
 		if err != nil {
 			if strings.Contains(err.Error(), "already installed") {
 				fmt.Printf("Server %s@%s is already installed\n", server.Name, version)
-				continue
+				// Still need to patch agent configs for already installed servers
+				installedServer = &MCPServer{
+					Name:       server.Name,
+					Version:    version,
+					Repository: server.Repository,
+					Command:    server.Command,
+					Args:       server.Args,
+					Env:        server.Env,
+				}
+
+				// Try to determine execution details if not provided
+				if installedServer.Command == "" {
+					serverDir := filepath.Join(m.dataDir, server.Name, version)
+					command, args, env, execErr := m.determineExecution(serverDir)
+					if execErr == nil {
+						installedServer.Command = command
+						installedServer.Args = args
+						installedServer.Env = env
+					}
+				}
+			} else {
+				return err
 			}
-			return err
+		} else {
+			fmt.Printf("Successfully installed %s@%s\n", server.Name, version)
 		}
-		fmt.Printf("Successfully installed %s@%s\n", server.Name, version)
+
+		// Patch agent configurations for all detected agents
+		if err := m.PatchAgentConfigs(installedServer); err != nil {
+			fmt.Printf("Warning: Failed to configure server %s for agents: %v\n", server.Name, err)
+		}
 	}
 
-	return nil
 	return nil
 }
 
@@ -749,6 +776,116 @@ func (m *Manager) AddServerToAgent(agentType AgentType, server *MCPServer) error
 	}
 
 	return m.agentConfigManager.AddServerToAgent(agentType, server)
+}
+
+// AddServerToAgentWithLocal adds an MCP server to a specific agent's configuration with local preference
+func (m *Manager) AddServerToAgentWithLocal(agentType AgentType, server *MCPServer, useLocal bool) error {
+	if m.agentConfigManager == nil {
+		return fmt.Errorf("agent config manager not initialized")
+	}
+
+	return m.agentConfigManager.AddServerToAgentWithLocal(agentType, server, useLocal)
+}
+
+// InstallServerAndAddToConfigForAgentWithLocal installs a server and adds it to the mcpv.json configuration for a specific agent with local preference
+func (m *Manager) InstallServerAndAddToConfigForAgentWithLocal(name, version, repository, configPath string, agentType AgentType, useLocal bool) error {
+	// Install the server
+	server, err := m.InstallServer(name, version, repository)
+	if err != nil {
+		return err
+	}
+
+	// Load existing config
+	config, err := m.LoadProjectConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Check if server already exists in config
+	for i, existingServer := range config.Servers {
+		if existingServer.Name == name && existingServer.Version == version {
+			// Update existing server with execution details
+			config.Servers[i] = *server
+			if err := m.SaveProjectConfig(config, configPath); err != nil {
+				return err
+			}
+			// Configure for specific agent with local preference
+			return m.AddServerToAgentWithLocal(agentType, server, useLocal)
+		}
+	}
+
+	// Add new server to config
+	config.Servers = append(config.Servers, *server)
+	if err := m.SaveProjectConfig(config, configPath); err != nil {
+		return err
+	}
+
+	// Configure for specific agent with local preference
+	return m.AddServerToAgentWithLocal(agentType, server, useLocal)
+}
+
+// InstallFromConfigForAgentWithLocal installs all servers specified in the project config for a specific agent with local preference
+func (m *Manager) InstallFromConfigForAgentWithLocal(configPath string, agentType AgentType, useLocal bool) error {
+	config, err := m.LoadProjectConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	for _, server := range config.Servers {
+		if server.Repository == "" {
+			return fmt.Errorf("repository not specified for server %s", server.Name)
+		}
+
+		version := server.Version
+		if version == "" {
+			version = "latest"
+		}
+
+		configType := "local"
+		if !useLocal {
+			configType = "global"
+		}
+		fmt.Printf("Installing %s@%s for %s agent (%s config)...\n", server.Name, version, agentType, configType)
+		_, err := m.InstallServer(server.Name, version, server.Repository)
+		if err != nil {
+			if strings.Contains(err.Error(), "already installed") {
+				fmt.Printf("Server %s@%s is already installed\n", server.Name, version)
+				// Still need to configure for the specific agent
+			} else {
+				return err
+			}
+		} else {
+			fmt.Printf("Successfully installed %s@%s\n", server.Name, version)
+		}
+
+		// Configure for specific agent with local preference
+		installedServer := &MCPServer{
+			Name:       server.Name,
+			Version:    version,
+			Repository: server.Repository,
+			Command:    server.Command,
+			Args:       server.Args,
+			Env:        server.Env,
+		}
+
+		// If we don't have execution details, try to determine them
+		if installedServer.Command == "" {
+			serverDir := filepath.Join(m.dataDir, server.Name, version)
+			command, args, env, err := m.determineExecution(serverDir)
+			if err == nil {
+				installedServer.Command = command
+				installedServer.Args = args
+				installedServer.Env = env
+			}
+		}
+
+		if err := m.AddServerToAgentWithLocal(agentType, installedServer, useLocal); err != nil {
+			return fmt.Errorf("failed to configure server %s for %s: %w", server.Name, agentType, err)
+		}
+		fmt.Printf("✓ Configured %s for %s agent (%s config)\n", server.Name, agentType, configType)
+	}
+
+	return nil
 }
 
 // GetAgentConfigManager returns the agent configuration manager
